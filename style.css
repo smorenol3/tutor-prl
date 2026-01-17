@@ -6,16 +6,14 @@ body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px;
 }
 
 .app {
-  width: 100%;
+  width: 90%;
   max-width: 900px;
   height: 80vh;
   background: rgba(255, 255, 255, 0.95);
@@ -134,67 +132,34 @@ header p {
   border-radius: 3px;
 }
 
-/* Estilos para el botón "Nuevo Test" en la parte inferior */
-.footer-buttons {
-  margin-top: 20px;
+/* Sección del pie con el botón "Nuevo Test" */
+.footer-section {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  align-items: center;
+  padding: 16px 20px;
+  background: white;
+  border-top: 1px solid #e2e8f0;
 }
 
 .reset-button {
-  padding: 12px 24px;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  border-radius: 25px;
+  padding: 10px 20px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #475569;
+  border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
 }
 
 .reset-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.8);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #1e293b;
 }
 
 .reset-button:active {
-  transform: translateY(0);
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .app {
-    height: 70vh;
-  }
-
-  header h1 {
-    font-size: 20px;
-  }
-
-  header p {
-    font-size: 13px;
-  }
-
-  .message {
-    max-width: 95%;
-  }
-
-  #chat-form {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  #chat-form button {
-    margin-left: 0;
-    width: 100%;
-  }
-
-  .reset-button {
-    width: 100%;
-  }
+  transform: scale(0.98);
 }
