@@ -4,6 +4,9 @@ const WORKER_URL = "https://tutor-prl-backend.s-morenoleiva91.workers.dev";
 //const OPENROUTER_API_KEY = "tu_api_key_aqui"; // ← REEMPLAZAR
 //const MODEL_ID = "openrouter/auto"; // ← O especifica un modelo
 
+// Pausa entre solicitudes (aumentada para evitar rate limits)
+const REQUEST_DELAY_MS = 2000; // 2 segundos
+
 // Prompt base del tutor PRL adaptativo
 const SYSTEM_PROMPT = `Eres un tutor inteligente adaptativo de Prevención de Riesgos Laborales (PRL) para empleados de una empresa financiera (oficina, sucursal, call center).
 
@@ -82,6 +85,9 @@ let userState = {
   messagesCount: 0
 };
 
+// Control de solicitudes en progreso
+let isRequestInProgress = false;
+
 // ===== FUNCIONES AUXILIARES =====
 
 /**
@@ -103,50 +109,46 @@ function addMessage(text, sender = "bot") {
 }
 
 /**
- * Llama al backend (Worker) en lugar de OpenRouter
+ * Llama al Cloudflare Worker con manejo mejorado de errores
  */
-async function callBackend(messages) {
-  const response = await fetch(`${WORKER_URL}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages })
-  });
-  
-  if (!response.ok) {
-    throw new Error('Error en el backend');
+async function callWorker(messages) {
+  try {
+    const response = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ messages })
+    });
+
+    // Verificar si la respuesta es correcta
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Error HTTP ${response.status}:`, errorText);
+      
+      // Intentar parsear como JSON
+      try {
+        const errorData = JSON.parse(errorText);
+        throw new Error(errorData.error || `Error ${response.status}`);
+      } catch (e) {
+        throw new Error(`Error del servidor: ${response.status}`);
+      }
+    }
+
+    // Parsear la respuesta JSON
+    const data = await response.json();
+    
+    // Validar que la respuesta tiene la estructura esperada
+    if (!data.reply) {
+      console.error("Respuesta del worker sin campo 'reply':", data);
+      throw new Error("Formato de respuesta inesperado del worker");
+    }
+
+    return data.reply;
+  } catch (error) {
+    console.error("Error en callWorker:", error);
+    throw error;
   }
-  
-  const data = await response.json();
-  return data.reply;
-}
-
-/**
- * Llama a la API de OpenRouter (alternativa)
- */
-async function callOpenRouter(messages) {
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://github.com/smorenol3/tutor-prl.git",
-      "X-Title": "Tutor PRL Financiero"
-    },
-    body: JSON.stringify({
-      model: MODEL_ID,
-      messages: messages,
-      stream: false
-    })
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    console.error("Error API:", text);
-    throw new Error("Error en la API");
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
 }
 
 /**
@@ -183,14 +185,19 @@ function getCurrentLevel() {
  * Guarda el progreso en localStorage
  */
 function saveProgress() {
-  const progress = {
-    role: getUserRole(),
-    experience: getUserExperience(),
-    testScore: getTestScore(),
-    currentLevel: getCurrentLevel(),
-    messages: messages.slice(1, 51)  // Excluir system prompt, últimos 50 mensajes
-  };
-  localStorage.setItem('tutorPRL_progress', JSON.stringify(progress));
+  try {
+    const progress = {
+      role: getUserRole(),
+      experience: getUserExperience(),
+      testScore: getTestScore(),
+      currentLevel: getCurrentLevel(),
+      // Mantener solo los últimos 15 mensajes para evitar que el historial sea muy grande
+      messages: messages.slice(Math.max(1, messages.length - 15))
+    };
+    localStorage.setItem('tutorPRL_progress', JSON.stringify(progress));
+  } catch (err) {
+    console.error("Error al guardar progreso:", err);
+  }
 }
 
 /**
@@ -250,40 +257,61 @@ chatForm.addEventListener("submit", async (e) => {
   const text = userInput.value.trim();
   if (!text) return;
 
+  // Evitar solicitudes simultáneas
+  if (isRequestInProgress) {
+    addMessage("Por favor, espera a que termine la respuesta anterior.", "bot");
+    return;
+  }
+
   // Mostrar mensaje del usuario
   addMessage(text, "user");
   userInput.value = "";
-  chatForm.querySelector("button").disabled = true;
+  const submitButton = chatForm.querySelector("button");
+  submitButton.disabled = true;
+  isRequestInProgress = true;
 
   // Añadir mensaje del usuario al historial
   messages.push({ role: "user", content: text });
   
-  // Pausa para evitar rate limits en modelos free
-  await new Promise(resolve => setTimeout(resolve, 1000)); // 1 segundo
+  // Pausa para evitar rate limits (aumentada)
+  await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS));
 
-  // Llamar a la API (elige una de las dos opciones)
+  // Llamar al worker de Cloudflare
   try {
-    // Opción 1: Usar el backend (Worker)
-    const reply = await callBackend(messages);
+    console.log("Enviando solicitud al worker...");
+    const reply = await callWorker(messages);
     
-    // Opción 2: Usar OpenRouter (descomenta si prefieres)
-    // const reply = await callOpenRouter(messages);
-    
-    if (reply) {
+    if (reply && reply.trim()) {
       messages.push({ role: "assistant", content: reply });
       addMessage(reply, "bot");
       saveProgress(); // Guardar después de cada respuesta
+      console.log("Respuesta recibida correctamente");
     } else {
-      addMessage("No he podido generar respuesta en este momento.", "bot");
+      addMessage("No he podido generar respuesta en este momento. Por favor, intenta de nuevo.", "bot");
+      console.warn("Respuesta vacía del worker");
     }
   } catch (err) {
-    console.error("Error:", err);
-    addMessage("Ha ocurrido un error al contactar con el tutor. Por favor, intenta de nuevo.", "bot");
+    console.error("Error completo:", err);
+    
+    // Mensaje de error detallado
+    let errorMsg = "Ha ocurrido un error al contactar con el tutor.";
+    
+    if (err.message.includes("Failed to fetch")) {
+      errorMsg = "Error de conexión. Verifica que el worker de Cloudflare está activo.";
+    } else if (err.message.includes("rate limited")) {
+      errorMsg = "El servicio está siendo utilizado mucho en este momento. Por favor, espera unos segundos e intenta de nuevo.";
+    } else if (err.message.includes("HTTP")) {
+      errorMsg = `Error del servidor: ${err.message}`;
+    } else if (err.message.includes("Formato")) {
+      errorMsg = "Error en la respuesta del servidor.";
+    }
+    
+    addMessage(errorMsg + " Por favor, intenta de nuevo.", "bot");
   } finally {
-    chatForm.querySelector("button").disabled = false;
+    submitButton.disabled = false;
+    isRequestInProgress = false;
   }
 });
 
-// Guardar progreso cada 10 segundos
-setInterval(saveProgress, 10000);
-
+// Guardar progreso cada 15 segundos
+setInterval(saveProgress, 15000);
