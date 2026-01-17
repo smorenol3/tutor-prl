@@ -1,26 +1,8 @@
-// Tu URL del Worker (cámbiala por la tuya)
+// ===== CONFIGURACIÓN =====
+// Reemplaza estas variables con tus valores reales
 const WORKER_URL = "https://tutor-prl-backend.s-morenoleiva91.workers.dev/";
-
-async function callMyBackend(messages) {
-  const response = await fetch(`${WORKER_URL}/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages })
-  });
-  
-  if (!response.ok) {
-    throw new Error('Error en el backend');
-  }
-  
-  const data = await response.json();
-  return data.reply;
-}
-
-chatForm.addEventListener("submit", async (e) => {  // ← async aquí
-  e.preventDefault();
-  const text = userInput.value.trim();
-  if (!text) return;
-
+const OPENROUTER_API_KEY = "tu_api_key_aqui"; // ← REEMPLAZAR
+const MODEL_ID = "openrouter/auto"; // ← O especifica un modelo
 
 // Prompt base del tutor PRL adaptativo
 const SYSTEM_PROMPT = `Eres un tutor inteligente adaptativo de Prevención de Riesgos Laborales (PRL) para empleados de una empresa financiera (oficina, sucursal, call center).
@@ -81,6 +63,7 @@ FLUJO GENERAL:
 Responde siempre en español y sigue estrictamente este flujo de turnos.
 `;
 
+// ===== VARIABLES GLOBALES =====
 const chatContainer = document.getElementById("chat-container");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
@@ -90,7 +73,20 @@ const messages = [
   { role: "system", content: SYSTEM_PROMPT }
 ];
 
-// Función para pintar mensajes en pantalla
+// Estado del usuario
+let userState = {
+  role: null,
+  experience: null,
+  testScore: 0,
+  currentLevel: null,
+  messagesCount: 0
+};
+
+// ===== FUNCIONES AUXILIARES =====
+
+/**
+ * Función para pintar mensajes en pantalla
+ */
 function addMessage(text, sender = "bot") {
   const div = document.createElement("div");
   div.classList.add("message", sender);
@@ -106,51 +102,33 @@ function addMessage(text, sender = "bot") {
   chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-
-// Mensaje inicial del tutor
-addMessage("Hola, soy tu tutor de PRL en entorno financiero. Para empezar, cuéntame tu rol (comercial, back-office, IT…) y tu experiencia en PRL (baja, media, alta).", "bot");
-
-// Manejo del envío del formulario
-chatForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const text = userInput.value.trim();
-  if (!text) return;
-
-  // Mostrar mensaje del usuario
-  addMessage(text, "user");
-  userInput.value = "";
-  chatForm.querySelector("button").disabled = true;
-
-  // Añadir mensaje del usuario al historial
-  messages.push({ role: "user", content: text });
-// Pausa para evitar rate limits en modelos free
-await new Promise(resolve => setTimeout(resolve, 6000)); // 6 segundos
-
-  // Llamar a la API de OpenRouter
-  try {
-    const reply = await callOpenRouter(messages);
-    if (reply) {
-      messages.push({ role: "assistant", content: reply });
-      addMessage(reply, "bot");
-    } else {
-      addMessage("No he podido generar respuesta en este momento.", "bot");
-    }
-  } catch (err) {
-    console.error(err);
-    addMessage("Ha ocurrido un error al contactar con el tutor.", "bot");
-  } finally {
-    chatForm.querySelector("button").disabled = false;
+/**
+ * Llama al backend (Worker) en lugar de OpenRouter
+ */
+async function callBackend(messages) {
+  const response = await fetch(`${WORKER_URL}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages })
+  });
+  
+  if (!response.ok) {
+    throw new Error('Error en el backend');
   }
-});
+  
+  const data = await response.json();
+  return data.reply;
+}
 
-// Función que llama a la API de OpenRouter
+/**
+ * Llama a la API de OpenRouter (alternativa)
+ */
 async function callOpenRouter(messages) {
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",
-      // Opcionales pero recomendados por OpenRouter
       "HTTP-Referer": "https://github.com/smorenol3/tutor-prl.git",
       "X-Title": "Tutor PRL Financiero"
     },
@@ -168,47 +146,143 @@ async function callOpenRouter(messages) {
   }
 
   const data = await response.json();
-  // Formato estándar tipo OpenAI/OpenRouter [web:102][web:103]
   return data.choices?.[0]?.message?.content || "";
 }
 
-// ===== GUARDADO DE PROGRESO =====
+/**
+ * Extrae el rol del usuario del historial de chat
+ */
+function getUserRole() {
+  return userState.role || "desconocido";
+}
+
+/**
+ * Extrae la experiencia del usuario del historial de chat
+ */
+function getUserExperience() {
+  return userState.experience || "desconocida";
+}
+
+/**
+ * Obtiene la puntuación del test
+ */
+function getTestScore() {
+  return userState.testScore;
+}
+
+/**
+ * Obtiene el nivel actual del usuario
+ */
+function getCurrentLevel() {
+  if (userState.testScore <= 2) return "BÁSICO";
+  if (userState.testScore <= 4) return "MEDIO";
+  return "AVANZADO";
+}
+
+/**
+ * Guarda el progreso en localStorage
+ */
 function saveProgress() {
   const progress = {
-    role: getUserRole(),  // función para extraer del chat
+    role: getUserRole(),
     experience: getUserExperience(),
     testScore: getTestScore(),
     currentLevel: getCurrentLevel(),
-    messages: messages.slice(0, 50)  // últimos 50 mensajes
+    messages: messages.slice(1, 51)  // Excluir system prompt, últimos 50 mensajes
   };
   localStorage.setItem('tutorPRL_progress', JSON.stringify(progress));
 }
 
-// Cargar progreso al iniciar
+/**
+ * Carga el progreso desde localStorage
+ */
 function loadProgress() {
   const saved = localStorage.getItem('tutorPRL_progress');
   if (saved) {
-    const progress = JSON.parse(saved);
-    // Restaurar mensajes si existen
-    if (progress.messages) {
-      progress.messages.forEach(msg => {
-        if (msg.role === 'user') addMessage(msg.content, 'user');
-        else if (msg.role === 'assistant') addMessage(msg.content, 'bot');
-      });
+    try {
+      const progress = JSON.parse(saved);
+      
+      // Restaurar estado del usuario
+      userState.role = progress.role;
+      userState.experience = progress.experience;
+      userState.testScore = progress.testScore;
+      userState.currentLevel = progress.currentLevel;
+      
+      // Restaurar mensajes si existen
+      if (progress.messages && Array.isArray(progress.messages)) {
+        progress.messages.forEach(msg => {
+          messages.push(msg);
+          if (msg.role === 'user') addMessage(msg.content, 'user');
+          else if (msg.role === 'assistant') addMessage(msg.content, 'bot');
+        });
+      }
+    } catch (err) {
+      console.error("Error al cargar progreso:", err);
     }
   }
 }
 
-// Botón para borrar progreso (añadir en HTML)
+/**
+ * Borra el progreso guardado
+ */
 function clearProgress() {
   localStorage.removeItem('tutorPRL_progress');
   location.reload();
 }
 
-// Llamar al cargar página
+// ===== INICIALIZACIÓN =====
+
+// Cargar progreso al iniciar
 loadProgress();
 
-// Guardar cada 10 segundos
+// Mensaje inicial del tutor (solo si es primera vez)
+if (messages.length === 1) {
+  addMessage("Hola, soy tu tutor de PRL en entorno financiero. Para empezar, cuéntame tu rol (comercial, back-office, IT…) y tu experiencia en PRL (baja, media, alta).", "bot");
+}
+
+// ===== EVENT LISTENERS =====
+
+/**
+ * Manejo del envío del formulario
+ */
+chatForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = userInput.value.trim();
+  if (!text) return;
+
+  // Mostrar mensaje del usuario
+  addMessage(text, "user");
+  userInput.value = "";
+  chatForm.querySelector("button").disabled = true;
+
+  // Añadir mensaje del usuario al historial
+  messages.push({ role: "user", content: text });
+  
+  // Pausa para evitar rate limits en modelos free
+  await new Promise(resolve => setTimeout(resolve, 1000)); // 1 segundo
+
+  // Llamar a la API (elige una de las dos opciones)
+  try {
+    // Opción 1: Usar el backend (Worker)
+    const reply = await callBackend(messages);
+    
+    // Opción 2: Usar OpenRouter (descomenta si prefieres)
+    // const reply = await callOpenRouter(messages);
+    
+    if (reply) {
+      messages.push({ role: "assistant", content: reply });
+      addMessage(reply, "bot");
+      saveProgress(); // Guardar después de cada respuesta
+    } else {
+      addMessage("No he podido generar respuesta en este momento.", "bot");
+    }
+  } catch (err) {
+    console.error("Error:", err);
+    addMessage("Ha ocurrido un error al contactar con el tutor. Por favor, intenta de nuevo.", "bot");
+  } finally {
+    chatForm.querySelector("button").disabled = false;
+  }
+});
+
+// Guardar progreso cada 10 segundos
 setInterval(saveProgress, 10000);
-
-
