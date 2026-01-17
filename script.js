@@ -16,8 +16,10 @@ async function callMyBackend(messages) {
   return data.reply;
 }
 
-// En el event listener, cambia:
-const reply = await callMyBackend(messages);  // en lugar de callOpenRouter
+chatForm.addEventListener("submit", async (e) => {  // ← async aquí
+  e.preventDefault();
+  const text = userInput.value.trim();
+  if (!text) return;
 
 
 // Prompt base del tutor PRL adaptativo
@@ -208,4 +210,5 @@ loadProgress();
 
 // Guardar cada 10 segundos
 setInterval(saveProgress, 10000);
+
 
