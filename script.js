@@ -1,8 +1,8 @@
 // ===== CONFIGURACIÓN =====
 // Reemplaza estas variables con tus valores reales
-const WORKER_URL = "https://tutor-prl-backend.s-morenoleiva91.workers.dev/";
-const OPENROUTER_API_KEY = "tu_api_key_aqui"; // ← REEMPLAZAR
-const MODEL_ID = "openrouter/auto"; // ← O especifica un modelo
+const WORKER_URL = "https://tutor-prl-backend.s-morenoleiva91.workers.dev";
+//const OPENROUTER_API_KEY = "tu_api_key_aqui"; // ← REEMPLAZAR
+//const MODEL_ID = "openrouter/auto"; // ← O especifica un modelo
 
 // Prompt base del tutor PRL adaptativo
 const SYSTEM_PROMPT = `Eres un tutor inteligente adaptativo de Prevención de Riesgos Laborales (PRL) para empleados de una empresa financiera (oficina, sucursal, call center).
@@ -286,3 +286,4 @@ chatForm.addEventListener("submit", async (e) => {
 
 // Guardar progreso cada 10 segundos
 setInterval(saveProgress, 10000);
+
