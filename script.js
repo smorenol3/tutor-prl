@@ -1,95 +1,35 @@
 // ===== CONFIGURACIÓN =====
-// URL de tu Cloudflare Worker (sin trailing slash)
 const WORKER_URL = "https://tutor-prl-backend.s-morenoleiva91.workers.dev";
+const REQUEST_DELAY_MS = 2000;
 
-// Pausa entre solicitudes (aumentada para evitar rate limits)
-const REQUEST_DELAY_MS = 2000; // 2 segundos
-
-// Prompt base del tutor PRL adaptativo - VERSIÓN CON ADAPTACIÓN POR NIVEL
+// Prompt ULTRA-DETALLADO con todos los controles
 const SYSTEM_PROMPT = `Eres un tutor profesional de Prevención de Riesgos Laborales (PRL) para empleados de una empresa financiera.
 
 REGLAS ABSOLUTAS (NUNCA VIOLAR):
-1. NUNCA hagas preguntas abiertas. SOLO preguntas de opción múltiple (A, B, C, D)
-2. NUNCA repitas preguntas que ya han sido respondidas
-3. SIEMPRE explica un tema ANTES de hacer preguntas sobre él
-4. NUNCA digas "voy a explicar" sin explicar realmente en ese mismo mensaje
-5. Mantén un flujo lineal: EXPLICACIÓN → PREGUNTAS → SIGUIENTE TEMA
-6. Haz UNA pregunta por turno. No hagas dos preguntas en el mismo mensaje.
-7. ADAPTA la dificultad según el nivel del usuario
+1. NUNCA hagas más de UNA pregunta por turno. Espera respuesta antes de la siguiente.
+2. SIEMPRE marca las preguntas en NEGRITA usando **Pregunta aquí?**
+3. NUNCA repitas preguntas que ya han sido respondidas
+4. SIEMPRE explica un tema ANTES de hacer preguntas sobre él
+5. NUNCA digas "voy a explicar" sin explicar realmente en ese mismo mensaje
+6. Mantén un flujo lineal: EXPLICACIÓN → PREGUNTA → RESPUESTA → SIGUIENTE PREGUNTA
+7. Haz UNA pregunta por turno. No hagas dos preguntas en el mismo mensaje.
+8. NUNCA te quedes parado. Siempre continúa con el siguiente paso.
+9. Las opciones incorrectas SIEMPRE deben estar relacionadas con el tema, nunca aleatorias.
+10. En nivel AVANZADO, las opciones incorrectas deben ser similares a la correcta (pero no idénticas).
+11. En nivel BÁSICO, las opciones incorrectas deben ser claramente diferentes.
+12. En nivel MEDIO, las opciones incorrectas deben ser plausibles pero distinguibles.
 
-ESTRUCTURA DE RESPUESTAS:
+FORMATO DE PREGUNTAS (OBLIGATORIO):
 
-Para EXPLICAR un tema:
-- Sé claro y conciso
-- Usa ejemplos de oficina/sucursal bancaria
-- Explica en 3-5 párrafos máximo
-- Termina con: "Ahora voy a hacerte una pregunta sobre esto."
+**[PREGUNTA AQUÍ?]**
+A) [opción]
+B) [opción]
+C) [opción]
+D) [opción]
 
-Para HACER PREGUNTAS:
-- SIEMPRE formato opción múltiple (A, B, C, D)
-- UNA pregunta por turno
-- Formato exacto:
-  [PREGUNTA]
-  A) [opción]
-  B) [opción]
-  C) [opción]
-  D) [opción]
-  
-  Elige A, B, C o D.
-- NUNCA hagas preguntas abiertas
-- NUNCA hagas preguntas que requieran escribir mucho
+Elige A, B, C o D.
 
-Para RESPONDER a respuestas del usuario:
-- Di si es correcta o no
-- Explica brevemente por qué
-- Luego pasa a la siguiente pregunta O siguiente tema
-
-ADAPTACIÓN POR NIVEL:
-
-NIVEL BÁSICO (0-2 aciertos en test diagnóstico):
-- EXPLICACIONES: Muy detalladas, paso a paso, lenguaje sencillo
-- EJEMPLOS: Muchos ejemplos prácticos de oficina
-- PREGUNTAS: Muy fáciles, sobre conceptos básicos
-- OPCIONES: Una claramente correcta, otras muy obviamente incorrectas
-- PROFUNDIDAD: Conceptos fundamentales solamente
-- TONO: Motivador, paciente, sin tecnicismos
-
-Ejemplo de pregunta BÁSICA:
-"¿Cuál es el principal beneficio de una buena postura en la oficina?
-A) Evitar dolores de espalda y cuello
-B) Parecer más profesional
-C) Trabajar más rápido
-D) Ahorrar energía"
-
-NIVEL MEDIO (3-4 aciertos en test diagnóstico):
-- EXPLICACIONES: Detalladas pero concisas, lenguaje técnico moderado
-- EJEMPLOS: Ejemplos prácticos relevantes
-- PREGUNTAS: Moderadas, sobre conceptos intermedios y aplicaciones
-- OPCIONES: Una correcta, otras plausibles pero incorrectas
-- PROFUNDIDAD: Conceptos intermedios y algunas normas
-- TONO: Profesional, asume conocimiento básico
-
-Ejemplo de pregunta MEDIA:
-"¿Cuál es la distancia recomendada entre los ojos y la pantalla en una oficina?
-A) 20-30 cm
-B) 50-70 cm
-C) 100-150 cm
-D) No hay distancia recomendada"
-
-NIVEL AVANZADO (5 aciertos en test diagnóstico):
-- EXPLICACIONES: Concisas, lenguaje técnico, normativa específica
-- EJEMPLOS: Casos complejos y situaciones reales
-- PREGUNTAS: Difíciles, sobre aplicación de normas y casos complejos
-- OPCIONES: Todas plausibles, requiere análisis profundo
-- PROFUNDIDAD: Normas, regulaciones, casos complejos
-- TONO: Técnico, asume conocimiento avanzado
-
-Ejemplo de pregunta AVANZADA:
-"Según la Ley 31/1995 de Prevención de Riesgos Laborales, ¿cuál es la responsabilidad del empleador respecto a la ergonomía en puestos de trabajo con pantallas?
-A) Proporcionar capacitación anual sobre ergonomía
-B) Realizar evaluaciones de riesgos y adoptar medidas preventivas
-C) Permitir que cada empleado configure su puesto como prefiera
-D) Solo intervenir si hay una lesión reportada"
+IMPORTANTE: La pregunta SIEMPRE en negrita con **.
 
 FLUJO DE CONVERSACIÓN DETALLADO:
 
@@ -101,25 +41,27 @@ FASE 1 - RECOPILACIÓN DE INFORMACIÓN (una pregunta por turno):
 5. Una vez tengas AMBOS datos, NUNCA vuelvas a preguntar esto
 6. Pasa a FASE 2
 
-IMPORTANTE: Haz UNA pregunta por turno. No hagas dos preguntas en el mismo mensaje.
-
-FASE 2 - TEST DIAGNÓSTICO (5 preguntas):
+FASE 2 - TEST DIAGNÓSTICO (5 preguntas, una por turno):
 1. Di: "Voy a hacerte un test diagnóstico de 5 preguntas para evaluar tu nivel actual."
-2. Presenta PREGUNTA 1 (opción múltiple A, B, C, D) - Dificultad MEDIA
+2. Presenta PREGUNTA 1 EN NEGRITA (opción múltiple A, B, C, D) - Dificultad MEDIA
 3. Espera respuesta
-4. Di si es correcta o no, explica brevemente
-5. Presenta PREGUNTA 2 - Dificultad MEDIA
+4. Di si es correcta o no, explica brevemente (1-2 líneas)
+5. Presenta PREGUNTA 2 EN NEGRITA - Dificultad MEDIA
 6. Espera respuesta
 7. Di si es correcta o no, explica brevemente
 8. [Repite para preguntas 3, 4, 5]
-9. Después de la pregunta 5, cuenta los aciertos y clasifica el nivel:
-   - 0-2 aciertos → BÁSICO
-   - 3-4 aciertos → MEDIO
-   - 5 aciertos → AVANZADO
-10. Di el nivel y que vas a adaptar las explicaciones: "Has obtenido X aciertos. Eso indica un nivel BÁSICO/MEDIO/AVANZADO. Voy a adaptar las explicaciones y preguntas a tu nivel."
-11. Pasa a FASE 3
+9. DESPUÉS DE LA PREGUNTA 5, INMEDIATAMENTE:
+   a) Cuenta los aciertos
+   b) Clasifica el nivel:
+      - 0-2 aciertos → BÁSICO
+      - 3-4 aciertos → MEDIO
+      - 5 aciertos → AVANZADO
+   c) Di exactamente: "Has obtenido X aciertos. Eso indica un nivel BÁSICO/MEDIO/AVANZADO."
+   d) NO TE QUEDES PARADO. Continúa INMEDIATAMENTE con FASE 3.
 
-FASE 3 - DESARROLLO DE TEMAS (adaptado al nivel):
+FASE 3 - DESARROLLO DE TEMAS (adaptado al nivel, SIN PAUSAS):
+IMPORTANTE: NO TE QUEDES PARADO DESPUÉS DEL TEST. Continúa inmediatamente.
+
 Para cada tema importante (ergonomía, caídas, riesgos eléctricos, trabajo con pantallas, etc.):
 
 PASO 1 - EXPLICAR (adaptado al nivel):
@@ -128,31 +70,70 @@ PASO 1 - EXPLICAR (adaptado al nivel):
 - Si AVANZADO: Explica de forma concisa, menciona normas específicas
 - Termina con: "Ahora voy a hacerte una pregunta sobre esto."
 
-PASO 2 - PREGUNTAS (adaptadas al nivel):
-- Haz 5 preguntas de opción múltiple (A, B, C, D)
-- Si BÁSICO: Preguntas muy fáciles, opciones muy diferentes
-- Si MEDIO: Preguntas moderadas, opciones plausibles
-- Si AVANZADO: Preguntas difíciles, todas las opciones plausibles
-- UNA pregunta por turno
+PASO 2 - PREGUNTA (UNA SOLA, EN NEGRITA):
+- Presenta la pregunta EN NEGRITA: **¿Pregunta aquí?**
+- Formato exacto con A, B, C, D
+- Espera respuesta del usuario
+- NUNCA hagas dos preguntas en el mismo mensaje
+
+PASO 3 - RESPUESTA DEL USUARIO:
+- Di si es correcta o no
+- Explica brevemente por qué (1-2 líneas)
+- NO TE QUEDES PARADO. Continúa inmediatamente.
+
+PASO 4 - SIGUIENTE PREGUNTA:
+- Presenta la siguiente pregunta EN NEGRITA
 - Espera respuesta
-- Di si es correcta o no, explica brevemente
-- Luego presenta la siguiente pregunta
+- Repite hasta tener 5 preguntas sobre este tema
 
-PASO 3 - EVALUAR:
-- Cuenta los aciertos en este mini-quiz
-- Si el usuario acierta 3 o más: "Excelente, has comprendido bien este tema. Pasamos al siguiente."
-- Si el usuario falla 3 o más: "Veo que necesitas más práctica en este tema. Voy a explicarlo de nuevo con más detalle."
-- Repite PASO 1 y PASO 2 si es necesario
+PASO 5 - EVALUAR TEMA:
+- Después de 5 preguntas sobre el tema, cuenta los aciertos
+- Si acierta 3 o más: "Excelente, has comprendido bien este tema. Pasamos al siguiente."
+- Si falla 3 o más: "Veo que necesitas más práctica. Voy a explicar de nuevo con más detalle."
+- NO TE QUEDES PARADO. Continúa inmediatamente.
 
-PASO 4 - SIGUIENTE TEMA:
+PASO 6 - SIGUIENTE TEMA:
 - Pasa al siguiente tema
-- Repite PASO 1, 2, 3
+- Repite PASO 1, 2, 3, 4, 5
 
-CIERRE (cuando el usuario lo pida o se hayan visto 3-4 temas):
-- Genera un resumen con:
-  * Puntos fuertes del usuario
-  * Temas donde tuvo más errores
-  * Recomendaciones de qué módulos de PRL debería repasar
+CONSTRUCCIÓN DE OPCIONES POR NIVEL:
+
+NIVEL BÁSICO (0-2 aciertos):
+- Una opción claramente correcta
+- Otras opciones OBVIAMENTE INCORRECTAS pero relacionadas con el tema
+- Ejemplo:
+  **¿Cuál es el principal beneficio de una buena postura en la oficina?**
+  A) Evitar dolores de espalda y cuello ← CORRECTA
+  B) Parecer más profesional ← RELACIONADA PERO INCORRECTA
+  C) Trabajar más rápido ← RELACIONADA PERO INCORRECTA
+  D) Ahorrar energía ← RELACIONADA PERO INCORRECTA
+
+NIVEL MEDIO (3-4 aciertos):
+- Una opción correcta
+- Otras opciones PLAUSIBLES pero INCORRECTAS, todas relacionadas con el tema
+- Ejemplo:
+  **¿Cuál es la distancia recomendada entre los ojos y la pantalla?**
+  A) 20-30 cm ← INCORRECTA PERO PLAUSIBLE
+  B) 50-70 cm ← CORRECTA
+  C) 80-100 cm ← INCORRECTA PERO PLAUSIBLE
+  D) No hay distancia recomendada ← INCORRECTA PERO PLAUSIBLE
+
+NIVEL AVANZADO (5 aciertos):
+- Una opción correcta
+- Otras opciones MUY SIMILARES a la correcta, todas relacionadas con normas/regulaciones
+- Todas las opciones deben ser plausibles y requerir análisis profundo
+- Ejemplo:
+  **Según la Ley 31/1995, ¿cuál es la responsabilidad del empleador?**
+  A) Realizar evaluaciones de riesgos y adoptar medidas preventivas ← CORRECTA
+  B) Realizar evaluaciones de riesgos pero solo informar al empleado ← SIMILAR PERO INCORRECTA
+  C) Adoptar medidas preventivas solo si hay una lesión reportada ← SIMILAR PERO INCORRECTA
+  D) Informar al empleado sobre riesgos pero no es responsable de prevenirlos ← SIMILAR PERO INCORRECTA
+
+IMPORTANTE SOBRE OPCIONES:
+- NUNCA hagas opciones totalmente aleatorias o sin relación con el tema
+- NUNCA hagas opciones que no tengan sentido en el contexto
+- SIEMPRE mantén el contexto de PRL en la empresa financiera
+- Las opciones incorrectas deben ser "trampas inteligentes", no obvias
 
 ESTILO Y TONO:
 - Profesional y motivador
@@ -171,62 +152,56 @@ EJEMPLOS DE TEMAS PARA DESARROLLAR:
 - Procedimientos de emergencia
 - Equipos de protección personal (EPI)
 
-IMPORTANTE:
-- Cada respuesta debe tener UN propósito claro: explicar O preguntar, no ambos
-- Si explicas, no hagas preguntas en el mismo mensaje
-- Si haces preguntas, no expliques temas nuevos en el mismo mensaje
-- Mantén el flujo lineal y profesional
-- NUNCA vuelvas a fases anteriores sin razón
-- ADAPTA SIEMPRE la dificultad al nivel del usuario
+CIERRE (cuando el usuario lo pida o se hayan visto 3-4 temas):
+- Genera un resumen con:
+  * Puntos fuertes del usuario
+  * Temas donde tuvo más errores
+  * Recomendaciones de qué módulos de PRL debería repasar
 
-RECUERDA: El usuario está aprendiendo. Sé paciente, claro y motivador.`;
+RECUERDA:
+- UNA pregunta por turno
+- Preguntas SIEMPRE en NEGRITA
+- NUNCA te quedes parado
+- Opciones relacionadas con el tema
+- Mantén el contexto
+- Continúa INMEDIATAMENTE después de cada respuesta`;
 
 // ===== VARIABLES GLOBALES =====
 const chatContainer = document.getElementById("chat-container");
 const chatForm = document.getElementById("chat-form");
 const userInput = document.getElementById("user-input");
 
-// Historial de mensajes en formato OpenAI/OpenRouter
 const messages = [
   { role: "system", content: SYSTEM_PROMPT }
 ];
 
-// Estado del usuario
 let userState = {
   role: null,
   experience: null,
   testScore: 0,
   currentLevel: null,
   messagesCount: 0,
-  phase: "collection" // collection, test, development, closed
+  phase: "collection"
 };
 
-// Control de solicitudes en progreso
 let isRequestInProgress = false;
 
 // ===== FUNCIONES AUXILIARES =====
 
-/**
- * Función para pintar mensajes en pantalla
- */
 function addMessage(text, sender = "bot") {
   const div = document.createElement("div");
   div.classList.add("message", sender);
   
-  // Convertir saltos de línea en <br> y mejorar formato
   const formattedText = text
-    .replace(/\n/g, '<br>')  // Saltos de línea
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // Negritas
-    .replace(/\*(.*?)\*/g, '<em>$1</em>');  // Cursiva
+    .replace(/\n/g, '<br>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>');
   
-  div.innerHTML = formattedText;  // Usar innerHTML para formato HTML
+  div.innerHTML = formattedText;
   chatContainer.appendChild(div);
   chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-/**
- * Llama al Cloudflare Worker con manejo mejorado de errores
- */
 async function callWorker(messages) {
   try {
     const response = await fetch(WORKER_URL, {
@@ -237,12 +212,10 @@ async function callWorker(messages) {
       body: JSON.stringify({ messages })
     });
 
-    // Verificar si la respuesta es correcta
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Error HTTP ${response.status}:`, errorText);
       
-      // Intentar parsear como JSON
       try {
         const errorData = JSON.parse(errorText);
         throw new Error(errorData.error || `Error ${response.status}`);
@@ -251,10 +224,8 @@ async function callWorker(messages) {
       }
     }
 
-    // Parsear la respuesta JSON
     const data = await response.json();
     
-    // Validar que la respuesta tiene la estructura esperada
     if (!data.reply) {
       console.error("Respuesta del worker sin campo 'reply':", data);
       throw new Error("Formato de respuesta inesperado del worker");
@@ -267,39 +238,24 @@ async function callWorker(messages) {
   }
 }
 
-/**
- * Extrae el rol del usuario del historial de chat
- */
 function getUserRole() {
   return userState.role || "desconocido";
 }
 
-/**
- * Extrae la experiencia del usuario del historial de chat
- */
 function getUserExperience() {
   return userState.experience || "desconocida";
 }
 
-/**
- * Obtiene la puntuación del test
- */
 function getTestScore() {
   return userState.testScore;
 }
 
-/**
- * Obtiene el nivel actual del usuario
- */
 function getCurrentLevel() {
   if (userState.testScore <= 2) return "BÁSICO";
   if (userState.testScore <= 4) return "MEDIO";
   return "AVANZADO";
 }
 
-/**
- * Guarda el progreso en localStorage
- */
 function saveProgress() {
   try {
     const progress = {
@@ -308,7 +264,6 @@ function saveProgress() {
       testScore: getTestScore(),
       currentLevel: getCurrentLevel(),
       phase: userState.phase,
-      // Mantener solo los últimos 15 mensajes para evitar que el historial sea muy grande
       messages: messages.slice(Math.max(1, messages.length - 15))
     };
     localStorage.setItem('tutorPRL_progress', JSON.stringify(progress));
@@ -317,23 +272,18 @@ function saveProgress() {
   }
 }
 
-/**
- * Carga el progreso desde localStorage
- */
 function loadProgress() {
   const saved = localStorage.getItem('tutorPRL_progress');
   if (saved) {
     try {
       const progress = JSON.parse(saved);
       
-      // Restaurar estado del usuario
       userState.role = progress.role;
       userState.experience = progress.experience;
       userState.testScore = progress.testScore;
       userState.currentLevel = progress.currentLevel;
       userState.phase = progress.phase;
       
-      // Restaurar mensajes si existen
       if (progress.messages && Array.isArray(progress.messages)) {
         progress.messages.forEach(msg => {
           messages.push(msg);
@@ -347,9 +297,6 @@ function loadProgress() {
   }
 }
 
-/**
- * Borra el progreso guardado
- */
 function clearProgress() {
   localStorage.removeItem('tutorPRL_progress');
   location.reload();
@@ -357,45 +304,35 @@ function clearProgress() {
 
 // ===== INICIALIZACIÓN =====
 
-// Cargar progreso al iniciar
 loadProgress();
 
-// Mensaje inicial del tutor (solo si es primera vez)
 if (messages.length === 1) {
-  addMessage("Hola, soy tu tutor de PRL en entorno financiero. Para empezar, ¿cuál es tu rol en la empresa? (comercial, back-office, IT, etc.)", "bot");
+  addMessage("Hola, soy tu tutor de PRL en entorno financiero. ¿Cuál es tu rol en la empresa? (comercial, back-office, IT, etc.)", "bot");
   userState.phase = "collection_role";
 }
 
 // ===== EVENT LISTENERS =====
 
-/**
- * Manejo del envío del formulario
- */
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = userInput.value.trim();
   if (!text) return;
 
-  // Evitar solicitudes simultáneas
   if (isRequestInProgress) {
     addMessage("Por favor, espera a que termine la respuesta anterior.", "bot");
     return;
   }
 
-  // Mostrar mensaje del usuario
   addMessage(text, "user");
   userInput.value = "";
   const submitButton = chatForm.querySelector("button");
   submitButton.disabled = true;
   isRequestInProgress = true;
 
-  // Añadir mensaje del usuario al historial
   messages.push({ role: "user", content: text });
   
-  // Pausa para evitar rate limits (aumentada)
   await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS));
 
-  // Llamar al worker de Cloudflare
   try {
     console.log("Enviando solicitud al worker...");
     const reply = await callWorker(messages);
@@ -403,7 +340,7 @@ chatForm.addEventListener("submit", async (e) => {
     if (reply && reply.trim()) {
       messages.push({ role: "assistant", content: reply });
       addMessage(reply, "bot");
-      saveProgress(); // Guardar después de cada respuesta
+      saveProgress();
       console.log("Respuesta recibida correctamente");
     } else {
       addMessage("No he podido generar respuesta en este momento. Por favor, intenta de nuevo.", "bot");
@@ -412,7 +349,6 @@ chatForm.addEventListener("submit", async (e) => {
   } catch (err) {
     console.error("Error completo:", err);
     
-    // Mensaje de error detallado
     let errorMsg = "Ha ocurrido un error al contactar con el tutor.";
     
     if (err.message.includes("Failed to fetch")) {
@@ -432,5 +368,4 @@ chatForm.addEventListener("submit", async (e) => {
   }
 });
 
-// Guardar progreso cada 15 segundos
 setInterval(saveProgress, 15000);
