@@ -1,5 +1,5 @@
 // ⚠️ PON AQUÍ TU API KEY DE OPENROUTER (solo para prototipo, no para producción)
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "YOUR_API_KEY_HERE"; // no poner la clave real en público
 
 // Modelo gratuito (ajusta si usas otro)
 const MODEL_ID = "tngtech/deepseek-r1t2-chimera:free"; // ejemplo de modelo gratis
@@ -115,3 +115,4 @@ async function callOpenRouter(messages) {
   // Formato estándar tipo OpenAI/OpenRouter [web:102][web:103]
   return data.choices?.[0]?.message?.content || "";
 }
+
